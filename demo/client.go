@@ -6,7 +6,7 @@ import (
 	"net/http"
 )
 
-func main() {
+func main1() {
 
 	// Create a new http client
 	client := &http.Client{}
