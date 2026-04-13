@@ -22,10 +22,26 @@ func rootHandler(w http.ResponseWriter, r *http.Request) {
 func teachersHandler(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
+		// teachers/{id}
+		//teachers/?key=value&query=value&sortby=email&sortorder=ASC
 		fmt.Println(r.URL.Path)
 		path := strings.TrimPrefix(r.URL.Path, "/teachers/")
 		userId := strings.TrimSuffix(path, "/")
+
 		fmt.Println("The id is:", userId)
+
+		fmt.Println("Query Params:", r.URL.Query())
+		queryParams := r.URL.Query()
+		sortBy := queryParams.Get("sortby")
+		key := queryParams.Get("key")
+		sortOrder := queryParams.Get("sortorder")
+
+		if sortOrder == "" {
+			sortOrder = "DESC"
+		}
+
+		fmt.Printf("SortBy: %v, Key: %v, SortOrder: %v\n", sortBy, key, sortOrder)
+
 		w.Write([]byte("Hello GET method on teachers route"))
 		fmt.Println("Hello GET method on teachers route")
 		return
