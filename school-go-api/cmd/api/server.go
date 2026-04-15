@@ -6,7 +6,6 @@ import (
 	"log"
 	"net/http"
 	mw "school-go-api/internal/api/middleware"
-	"time"
 )
 
 type user struct {
@@ -93,16 +92,18 @@ func main() {
 		MinVersion: tls.VersionTLS13,
 	}
 
-	rl := mw.NewRateLimiter(5, time.Minute)
+	// rl := mw.NewRateLimiter(5, time.Minute)
 
-	hppOptions := mw.HPPOptions{
-		CheckQery:                   true,
-		CheckBody:                   true,
-		CheckBodyOnlyForContentType: "application/x-www-form-urlencoded",
-		Whitelist:                   []string{"sortBy, sortOrder", "name", "age", "city"},
-	}
+	// hppOptions := mw.HPPOptions{
+	// 	CheckQery:                   true,
+	// 	CheckBody:                   true,
+	// 	CheckBodyOnlyForContentType: "application/x-www-form-urlencoded",
+	// 	Whitelist:                   []string{"sortBy, sortOrder", "name", "age", "city"},
+	// }
 
-	secureMux := mw.CORS(rl.RateLimiter(mw.ResponseTime(mw.SecurityHeaders(mw.Compression(mw.Hpp(hppOptions)(mux))))))
+	secureMux := mw.SecurityHeaders(mux)
+
+	// secureMux := applyMiddlewares(mux, mw.Hpp(hppOptions), mw.Compression, mw.SecurityHeaders, mw.ResponseTime, rl.RateLimiter, mw.CORS)
 
 	server := &http.Server{
 		TLSConfig: tlsConfig,
@@ -115,4 +116,13 @@ func main() {
 	if err != nil {
 		log.Fatalln("Error starting the server", err)
 	}
+}
+
+type Middleware func(http.Handler) http.Handler
+
+func applyMiddlewares(handler http.Handler, middlewares ...Middleware) http.Handler {
+	for _, middleware := range middlewares {
+		handler = middleware(handler)
+	}
+	return handler
 }
