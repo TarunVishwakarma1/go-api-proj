@@ -21,7 +21,7 @@ func ResponseTime(next http.Handler) http.Handler {
 		next.ServeHTTP(wrappedWriter, r)
 		duration = time.Since(start)
 		//. Log the request details
-		fmt.Printf("Method %s, URL: %s, Status: %s, Duration: %v\n", r.Method, r.URL, wrappedWriter.status, duration.String())
+		fmt.Printf("Method %s, URL: %s, Status: %d, Duration: %v\n", r.Method, r.URL, wrappedWriter.status, duration.String())
 		fmt.Println("Sent Response from Response time middlerware")
 	})
 }
