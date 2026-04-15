@@ -2,16 +2,131 @@ package main
 
 import (
 	"crypto/tls"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	mw "school-go-api/internal/api/middleware"
+	"strconv"
+	"strings"
+	"sync"
 )
 
-type user struct {
-	Name string `json:"name"`
-	Age  string `json:"age"`
-	City string `json:"city"`
+type Teacher struct {
+	ID        int    `json:"id,omitempty"`
+	FirstName string `json:"firstname,omitempty"`
+	LastName  string `json:"lastname,omitempty"`
+	Class     string `json:"class,omitempty"`
+	Subject   string `json:"subject,omitempty"`
+}
+
+var teachers = make(map[int]Teacher)
+var mutex = &sync.Mutex{}
+var nextId = 1
+
+func init() {
+	teachers[nextId] = Teacher{
+		ID:        nextId,
+		FirstName: "John",
+		LastName:  "Doe",
+		Class:     "9A",
+		Subject:   "Maths",
+	}
+	nextId++
+	teachers[nextId] = Teacher{
+		ID:        nextId,
+		FirstName: "Jane",
+		LastName:  "Smith",
+		Class:     "10A",
+		Subject:   "Algebra",
+	}
+	nextId++
+	teachers[nextId] = Teacher{
+		ID:        nextId,
+		FirstName: "Jane",
+		LastName:  "Doe",
+		Class:     "11A",
+		Subject:   "Biology",
+	}
+	nextId++
+}
+
+func getTeachersHandler(w http.ResponseWriter, r *http.Request) {
+
+	path := strings.TrimPrefix(r.URL.Path, "/teachers/")
+	idStr := strings.TrimSuffix(path, "/")
+	if idStr == "" {
+		firstName := r.URL.Query().Get("firstName")
+		lastName := r.URL.Query().Get("lastName")
+
+		teacherList := make([]Teacher, 0, len(teachers))
+		for _, teacher := range teachers {
+			if (firstName == "" || teacher.FirstName == firstName) && (lastName == "" || lastName == teacher.LastName) {
+				teacherList = append(teacherList, teacher)
+			}
+		}
+
+		response := struct {
+			Status string    `json:"status"`
+			Count  int       `json:"count"`
+			Data   []Teacher `json:"data"`
+		}{
+			Status: "success",
+			Count:  len(teachers),
+			Data:   teacherList,
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
+	}
+
+	// Handler Path parameter
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	teacher, exists := teachers[id]
+	if !exists {
+		http.Error(w, "Teacher not found", http.StatusNotFound)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(teacher)
+}
+
+func addTeacherHandler(w http.ResponseWriter, r *http.Request) {
+	defer mutex.Unlock()
+	mutex.Lock()
+
+	var newTeachers []Teacher
+	err := json.NewDecoder(r.Body).Decode(&newTeachers)
+	if err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+	addedTeacher := make([]Teacher, len(newTeachers))
+	for i, newTeacher := range newTeachers {
+		newTeacher.ID = nextId
+		teachers[nextId] = newTeacher
+		addedTeacher[i] = newTeacher
+		nextId++
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	response := struct {
+		Status string    `json:"status"`
+		Count  int       `json:"count"`
+		Data   []Teacher `json:"data"`
+	}{
+		Status: "success",
+		Count:  len(addedTeacher),
+		Data:   addedTeacher,
+	}
+
+	json.NewEncoder(w).Encode(response)
 }
 
 func rootHandler(w http.ResponseWriter, r *http.Request) {
@@ -21,9 +136,11 @@ func rootHandler(w http.ResponseWriter, r *http.Request) {
 func teachersHandler(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		w.Write([]byte("Hello GET method on teachers route"))
+		// call get method handler func
+		getTeachersHandler(w, r)
 	case http.MethodPost:
-		w.Write([]byte("Hello POST method on teachers route"))
+		// Post request handler
+		addTeacherHandler(w, r)
 	case http.MethodPut:
 		w.Write([]byte("Hello PUT method on teachers route"))
 	case http.MethodPatch:
