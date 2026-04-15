@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"school-go-api/internal/api/middleware"
+	mw "school-go-api/internal/api/middleware"
 )
 
 type user struct {
@@ -110,7 +110,7 @@ func main() {
 	server := &http.Server{
 		TLSConfig: tlsConfig,
 		Addr:      port,
-		Handler:   middleware.SecurityHeaders(mux),
+		Handler:   mw.Compression(mux),
 	}
 
 	fmt.Println("Server is running on port:", port)
