@@ -1,6 +1,9 @@
 package middleware
 
-import "net/http"
+import (
+	"fmt"
+	"net/http"
+)
 
 // Allowed Origins
 var allowedOrigins = []string{
@@ -9,6 +12,7 @@ var allowedOrigins = []string{
 }
 
 func CORS(next http.Handler) http.Handler {
+	fmt.Println("Cors Middleware ....")
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		origin := r.Header.Get("Origin")
 		if !isOriginAllowedOrigin(origin) {
@@ -29,14 +33,19 @@ func CORS(next http.Handler) http.Handler {
 		}
 
 		next.ServeHTTP(w, r)
+		fmt.Println("Cors Middleware ends....")
+
 	})
 }
 
 func isOriginAllowedOrigin(origin string) bool {
+	if origin == "" {
+		return true // Allow requests without Origin header (like Postman or cURL)
+	}
 	for _, allowedOrigin := range allowedOrigins {
-		if origin != allowedOrigin {
-			return false
+		if origin == allowedOrigin {
+			return true
 		}
 	}
-	return true
+	return false
 }
