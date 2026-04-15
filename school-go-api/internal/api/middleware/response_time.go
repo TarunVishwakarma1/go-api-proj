@@ -7,7 +7,11 @@ import (
 )
 
 func ResponseTime(next http.Handler) http.Handler {
+	fmt.Println("Response Time Middleware ....")
+
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Println("Response Time Middleware returned....")
+
 		start := time.Now()
 
 		// Create a custom response writer to capture the satus code

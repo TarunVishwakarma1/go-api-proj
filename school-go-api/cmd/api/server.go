@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	mw "school-go-api/internal/api/middleware"
+	"time"
 )
 
 type user struct {
@@ -22,19 +23,14 @@ func teachersHandler(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		w.Write([]byte("Hello GET method on teachers route"))
-		return
 	case http.MethodPost:
 		w.Write([]byte("Hello POST method on teachers route"))
-		return
 	case http.MethodPut:
 		w.Write([]byte("Hello PUT method on teachers route"))
-		return
 	case http.MethodPatch:
 		w.Write([]byte("Hello PATCH method on teachers route"))
-		return
 	case http.MethodDelete:
 		w.Write([]byte("Hello DELETE method on teachers route"))
-		return
 	default:
 	}
 }
@@ -43,19 +39,14 @@ func studentsHandler(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		w.Write([]byte("Hello GET method on Students route"))
-		return
 	case http.MethodPost:
 		w.Write([]byte("Hello POST method on Students route"))
-		return
 	case http.MethodPut:
 		w.Write([]byte("Hello PUT method on Students route"))
-		return
 	case http.MethodPatch:
 		w.Write([]byte("Hello PATCH method on Students route"))
-		return
 	case http.MethodDelete:
 		w.Write([]byte("Hello DELETE method on Students route"))
-		return
 	default:
 	}
 
@@ -65,19 +56,14 @@ func execsHandler(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		w.Write([]byte("Hello GET method on Execs route"))
-		return
 	case http.MethodPost:
 		w.Write([]byte("Hello POST method on Execs route"))
-		return
 	case http.MethodPut:
 		w.Write([]byte("Hello PUT method on Execs route"))
-		return
 	case http.MethodPatch:
 		w.Write([]byte("Hello PATCH method on Execs route"))
-		return
 	case http.MethodDelete:
 		w.Write([]byte("Hello DELETE method on Execs route"))
-		return
 	default:
 	}
 
@@ -107,10 +93,21 @@ func main() {
 		MinVersion: tls.VersionTLS13,
 	}
 
+	rl := mw.NewRateLimiter(5, time.Minute)
+
+	hppOptions := mw.HPPOptions{
+		CheckQery:                   true,
+		CheckBody:                   true,
+		CheckBodyOnlyForContentType: "application/x-www-form-urlencoded",
+		Whitelist:                   []string{"sortBy, sortOrder", "name", "age", "city"},
+	}
+
+	secureMux := mw.CORS(rl.RateLimiter(mw.ResponseTime(mw.SecurityHeaders(mw.Compression(mw.Hpp(hppOptions)(mux))))))
+
 	server := &http.Server{
 		TLSConfig: tlsConfig,
 		Addr:      port,
-		Handler:   mw.Compression(mux),
+		Handler:   secureMux, //secureMux,
 	}
 
 	fmt.Println("Server is running on port:", port)
