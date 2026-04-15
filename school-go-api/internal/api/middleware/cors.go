@@ -10,7 +10,7 @@ var allowedOrigins = []string{
 
 func CORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		origin := r.Header.Get("Accept-Encoding")
+		origin := r.Header.Get("Origin")
 		if !isOriginAllowedOrigin(origin) {
 			http.Error(w, "Not Allowed", http.StatusForbidden)
 			return
@@ -23,6 +23,11 @@ func CORS(next http.Handler) http.Handler {
 		w.Header().Set("Access-Control-Allow-Credentials", "Content-Type, true")
 		w.Header().Set("Access-Control-Expose-Headers", "Authorization")
 		w.Header().Set("Access-Control-Max-Age", "3600")
+
+		if r.Method == http.MethodOptions {
+			return
+		}
+
 		next.ServeHTTP(w, r)
 	})
 }
