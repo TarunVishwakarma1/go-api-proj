@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"school-go-api/internal/api/handlers"
 	mw "school-go-api/internal/api/middleware"
+	"school-go-api/internal/api/router"
 )
 
 func main() {
@@ -14,24 +14,6 @@ func main() {
 
 	cert := "cert.pem"
 	key := "key.pem"
-
-	mux := http.NewServeMux()
-
-	// Root Route
-	mux.HandleFunc("/", handlers.RootHandler)
-
-	// Teachers Route
-	mux.HandleFunc("/teachers/", handlers.TeachersHandler)
-
-	// Students Route
-	mux.HandleFunc("/students/", handlers.StudentsHandler)
-
-	// EXECS Route
-	mux.HandleFunc("/execs/", handlers.ExecsHandler)
-
-	tlsConfig := &tls.Config{
-		MinVersion: tls.VersionTLS13,
-	}
 
 	// rl := mw.NewRateLimiter(5, time.Minute)
 
@@ -42,7 +24,12 @@ func main() {
 	// 	Whitelist:                   []string{"sortBy, sortOrder", "name", "age", "city"},
 	// }
 
-	secureMux := mw.SecurityHeaders(mux)
+	tlsConfig := &tls.Config{
+		MinVersion: tls.VersionTLS13,
+	}
+
+	router := router.Router()
+	secureMux := mw.SecurityHeaders(router)
 
 	// secureMux := utils.ApplyMiddlewares(mux, mw.Hpp(hppOptions), mw.Compression, mw.SecurityHeaders, mw.ResponseTime, rl.RateLimiter, mw.CORS)
 
