@@ -7,9 +7,15 @@ import (
 	"net/http"
 	mw "school-go-api/internal/api/middleware"
 	"school-go-api/internal/api/router"
+	"school-go-api/internal/repositories/sqlconnect"
 )
 
 func main() {
+
+	_, err := sqlconnect.ConnectDB("mydb")
+	if err != nil {
+		fmt.Println("Error:", err)
+	}
 	port := ":3000"
 
 	cert := "cert.pem"
@@ -40,7 +46,7 @@ func main() {
 	}
 
 	fmt.Println("Server is running on port:", port)
-	err := server.ListenAndServeTLS(cert, key)
+	err = server.ListenAndServeTLS(cert, key)
 	if err != nil {
 		log.Fatalln("Error starting the server", err)
 	}
