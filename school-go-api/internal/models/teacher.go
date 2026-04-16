@@ -4,6 +4,7 @@ type Teacher struct {
 	ID        int    `json:"id,omitempty"`
 	FirstName string `json:"firstname,omitempty"`
 	LastName  string `json:"lastname,omitempty"`
+	Email     string `json:"email,omitempty"`
 	Class     string `json:"class,omitempty"`
 	Subject   string `json:"subject,omitempty"`
 }

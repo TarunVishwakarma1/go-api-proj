@@ -5,18 +5,24 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	mw "school-go-api/internal/api/middleware"
 	"school-go-api/internal/api/router"
 	"school-go-api/internal/repositories/sqlconnect"
+
+	"github.com/joho/godotenv"
 )
 
 func main() {
+	if err := godotenv.Load(); err != nil {
+		fmt.Println("Error", err)
+	}
 
-	_, err := sqlconnect.ConnectDB("mydb")
+	_, err := sqlconnect.ConnectDB()
 	if err != nil {
 		fmt.Println("Error:", err)
 	}
-	port := ":3000"
+	port := os.Getenv("API_PORT")
 
 	cert := "cert.pem"
 	key := "key.pem"

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"school-go-api/internal/models"
+	"school-go-api/internal/repositories/sqlconnect"
 	"strconv"
 	"strings"
 	"sync"
@@ -105,23 +106,41 @@ func getTeachersHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func addTeacherHandler(w http.ResponseWriter, r *http.Request) {
-	defer mutex.Unlock()
-	mutex.Lock()
-
+	db, err := sqlconnect.ConnectDB()
+	if err != nil {
+		http.Error(w, "Error connecting to database", http.StatusInternalServerError)
+		return
+	}
+	defer db.Close()
 	var newTeachers []models.Teacher
-	err := json.NewDecoder(r.Body).Decode(&newTeachers)
+	err = json.NewDecoder(r.Body).Decode(&newTeachers)
 	if err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
-	addedTeacher := make([]models.Teacher, len(newTeachers))
-	for i, newTeacher := range newTeachers {
-		newTeacher.ID = nextId
-		teachers[nextId] = newTeacher
-		addedTeacher[i] = newTeacher
-		nextId++
+	stmt, err := db.Prepare("INSERT INTO teachers (first_name, last_name, email, class, subject) VALUES (?, ?, ?, ?, ?)")
+	if err != nil {
+		http.Error(w, "Error in preparing SQL query", http.StatusInternalServerError)
 	}
+	defer stmt.Close()
+	addedTeachers := make([]models.Teacher, len(newTeachers))
+	for i, newTeacher := range newTeachers {
+		res, err := stmt.Exec(newTeacher.FirstName, newTeacher.LastName, newTeacher.Email, newTeacher.Class, newTeacher.Subject)
+		if err != nil {
+			fmt.Println("Error", err)
+			http.Error(w, "Error inserting data into database", http.StatusInternalServerError)
+			return
+		}
 
+		lasId, err := res.LastInsertId()
+		if err != nil {
+			fmt.Println("Error", err)
+			http.Error(w, "Error getting last insert id", http.StatusInternalServerError)
+			return
+		}
+		newTeacher.ID = int(lasId)
+		addedTeachers[i] = newTeacher
+	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	response := struct {
@@ -130,8 +149,8 @@ func addTeacherHandler(w http.ResponseWriter, r *http.Request) {
 		Data   []models.Teacher `json:"data"`
 	}{
 		Status: "success",
-		Count:  len(addedTeacher),
-		Data:   addedTeacher,
+		Count:  len(addedTeachers),
+		Data:   addedTeachers,
 	}
 
 	json.NewEncoder(w).Encode(response)
