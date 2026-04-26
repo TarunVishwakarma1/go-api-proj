@@ -1,8 +1,10 @@
 package handlers
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"school-go-api/internal/models"
 	"school-go-api/internal/repositories/sqlconnect"
@@ -51,7 +53,7 @@ func TeachersHandler(w http.ResponseWriter, r *http.Request) {
 		// Post request handler
 		addTeacherHandler(w, r)
 	case http.MethodPut:
-		w.Write([]byte("Hello PUT method on teachers route"))
+		updateTeacherHandler(w, r)
 	case http.MethodPatch:
 		w.Write([]byte("Hello PATCH method on teachers route"))
 	case http.MethodDelete:
@@ -60,19 +62,54 @@ func TeachersHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func isValidSortOrder(order string) bool {
+	return order == "asc" || order == "desc"
+}
+
+func isValidSortField(field string) bool {
+	validFields := map[string]bool{
+		"first_name": true,
+		"last_name":  true,
+		"email":      true,
+		"class":      true,
+		"subject":    true,
+	}
+	return validFields[field]
+}
+
 func getTeachersHandler(w http.ResponseWriter, r *http.Request) {
+	db, err := sqlconnect.ConnectDB()
+	if err != nil {
+		http.Error(w, "Error connecting to database", http.StatusInternalServerError)
+		return
+	}
+	defer db.Close()
 
 	path := strings.TrimPrefix(r.URL.Path, "/teachers/")
 	idStr := strings.TrimSuffix(path, "/")
-	if idStr == "" {
-		firstName := r.URL.Query().Get("firstName")
-		lastName := r.URL.Query().Get("lastName")
 
-		teacherList := make([]models.Teacher, 0, len(teachers))
-		for _, teacher := range teachers {
-			if (firstName == "" || teacher.FirstName == firstName) && (lastName == "" || lastName == teacher.LastName) {
-				teacherList = append(teacherList, teacher)
+	if idStr == "" {
+		qry := "SELECT id, first_name, last_name, email, class, subject FROM teachers WHERE 1=1"
+		var args []any
+		qry, args = addFilters(r, qry, args)
+
+		qry = addSorting(r, qry)
+		fmt.Println(qry)
+
+		rows, err := db.Query(qry, args...)
+		if err != nil {
+			fmt.Println(err)
+			http.Error(w, "Database error", http.StatusInternalServerError)
+		}
+		teacherList := make([]models.Teacher, 0)
+		for rows.Next() {
+			var teacher models.Teacher
+			err := rows.Scan(&teacher.ID, &teacher.FirstName, &teacher.LastName, &teacher.Email, &teacher.Class, &teacher.Subject)
+			if err != nil {
+				http.Error(w, "Error in database results", http.StatusInternalServerError)
+				return
 			}
+			teacherList = append(teacherList, teacher)
 		}
 
 		response := struct {
@@ -81,28 +118,75 @@ func getTeachersHandler(w http.ResponseWriter, r *http.Request) {
 			Data   []models.Teacher `json:"data"`
 		}{
 			Status: "success",
-			Count:  len(teachers),
+			Count:  len(teacherList),
 			Data:   teacherList,
 		}
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(response)
+		return
 	}
 
 	// Handler Path parameter
 	id, err := strconv.Atoi(idStr)
 	if err != nil {
 		fmt.Println(err)
+		http.Error(w, "Error getting teachers", http.StatusInternalServerError)
 		return
 	}
 
-	teacher, exists := teachers[id]
-	if !exists {
-		http.Error(w, "Teacher not found", http.StatusNotFound)
+	var teacher models.Teacher
+	err = db.QueryRow("SELECT id, first_name, last_name, email, class, subject FROM teachers where id = ?", id).Scan(&teacher.ID, &teacher.FirstName, &teacher.LastName, &teacher.Email, &teacher.Class, &teacher.Subject)
+	if err == sql.ErrNoRows {
+		http.Error(w, "Teachers not found", http.StatusNotFound)
 		return
+	} else if err != nil {
+		http.Error(w, "Database query error", http.StatusInternalServerError)
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(teacher)
+}
+
+func addSorting(r *http.Request, qry string) string {
+	sortParams := r.URL.Query()["sortby"]
+	if len(sortParams) > 0 {
+		qry += " ORDER BY"
+
+		for i, param := range sortParams {
+			parts := strings.Split(string(param), ":")
+			if len(parts) != 2 {
+				continue
+			}
+			field, order := parts[0], parts[1]
+			if !isValidSortField(field) || !isValidSortOrder(order) {
+				continue
+			}
+			if i > 0 {
+				qry += ","
+			}
+			qry += " " + field + " " + order
+		}
+	}
+	return qry
+}
+
+func addFilters(r *http.Request, qry string, args []any) (string, []any) {
+	params := map[string]string{
+		"first_name": "first_name",
+		"last_name":  "last_name",
+		"email":      "email",
+		"class":      "class",
+		"subject":    "subject",
+	}
+
+	for param, dbField := range params {
+		value := r.URL.Query().Get(param)
+		if value != "" {
+			qry += " AND " + dbField + " = ?"
+			args = append(args, value)
+		}
+	}
+	return qry, args
 }
 
 func addTeacherHandler(w http.ResponseWriter, r *http.Request) {
@@ -154,4 +238,57 @@ func addTeacherHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	json.NewEncoder(w).Encode(response)
+}
+
+func updateTeacherHandler(w http.ResponseWriter, r *http.Request) {
+	idStr := strings.TrimPrefix(r.URL.Path, "/teachers/")
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		log.Println(err)
+		http.Error(w, "Invalid Id", http.StatusBadRequest)
+		return
+	}
+
+	var updatedTeacher models.Teacher
+
+	err = json.NewDecoder(r.Body).Decode(&updatedTeacher)
+	if err != nil {
+		log.Println(err)
+		http.Error(w, "Invalid Request", http.StatusBadRequest)
+
+		return
+	}
+
+	db, err := sqlconnect.ConnectDB()
+	if err != nil {
+		log.Println(err)
+		http.Error(w, "Unable to connect to database", http.StatusInternalServerError)
+		return
+	}
+	defer db.Close()
+
+	var existingTeacher models.Teacher
+	err = db.QueryRow("SELECt id, first_name, last_name, email, class, subject from teachers where id = ?", id).Scan(&existingTeacher.ID, &existingTeacher.FirstName,
+		&existingTeacher.LastName, &existingTeacher.Email, &existingTeacher.Class, &existingTeacher.Subject,
+	)
+	if err == sql.ErrNoRows {
+		http.Error(w, "Teacher not found", http.StatusNotFound)
+	} else if err != nil {
+		log.Println(err)
+		http.Error(w, "Unable to retrieve data", http.StatusInternalServerError)
+		return
+	}
+
+	updatedTeacher.ID = existingTeacher.ID
+	_, err = db.Exec("UPDATE techers SET first_name = ?, last_name = ?, email = ?, class = ?, subject = ? WHERE id = ?",
+		updatedTeacher.FirstName, updatedTeacher.LastName, updatedTeacher.Email, updatedTeacher.Class, updatedTeacher.Subject, updatedTeacher.ID,
+	)
+	if err != nil {
+		http.Error(w, "Error update teachers", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(updatedTeacher)
+
 }
