@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"reflect"
 	"school-go-api/internal/models"
 	"school-go-api/internal/repositories/sqlconnect"
 	"strconv"
@@ -47,17 +48,15 @@ func init() {
 func TeachersHandler(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		// call get method handler func
 		getTeachersHandler(w, r)
 	case http.MethodPost:
-		// Post request handler
 		addTeacherHandler(w, r)
 	case http.MethodPut:
 		updateTeacherHandler(w, r)
 	case http.MethodPatch:
-		w.Write([]byte("Hello PATCH method on teachers route"))
+		patchTeacher(w, r)
 	case http.MethodDelete:
-		w.Write([]byte("Hello DELETE method on teachers route"))
+		deleteTeacher(w, r)
 	default:
 	}
 }
@@ -291,4 +290,134 @@ func updateTeacherHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(updatedTeacher)
 
+}
+
+func patchTeacher(w http.ResponseWriter, r *http.Request) {
+	idStr := strings.TrimPrefix(r.URL.Path, "/teachers/")
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		log.Println(err)
+		http.Error(w, "Invalid Id", http.StatusBadRequest)
+		return
+	}
+
+	var updates map[string]any
+
+	err = json.NewDecoder(r.Body).Decode(&updates)
+	if err != nil {
+		log.Println(err)
+		http.Error(w, "Invalid Request", http.StatusBadRequest)
+
+		return
+	}
+
+	db, err := sqlconnect.ConnectDB()
+	if err != nil {
+		log.Println(err)
+		http.Error(w, "Unable to connect to database", http.StatusInternalServerError)
+		return
+	}
+	defer db.Close()
+
+	var existingTeacher models.Teacher
+	err = db.QueryRow("SELECt id, first_name, last_name, email, class, subject from teachers where id = ?", id).Scan(&existingTeacher.ID, &existingTeacher.FirstName,
+		&existingTeacher.LastName, &existingTeacher.Email, &existingTeacher.Class, &existingTeacher.Subject,
+	)
+	if err == sql.ErrNoRows {
+		http.Error(w, "Teacher not found", http.StatusNotFound)
+	} else if err != nil {
+		log.Println(err)
+		http.Error(w, "Unable to retrieve data", http.StatusInternalServerError)
+		return
+	}
+
+	// Apply updates
+	// for k, v := range updates {
+	// 	switch k {
+	// 	case "first_name":
+	// 		existingTeacher.FirstName = v.(string)
+	// 	case "last_name":
+	// 		existingTeacher.FirstName = v.(string)
+	// 	case "email":
+	// 		existingTeacher.FirstName = v.(string)
+	// 	case "class":
+	// 		existingTeacher.FirstName = v.(string)
+	// 	case "subject":
+	// 		existingTeacher.FirstName = v.(string)
+
+	// 	}
+	// }
+
+	// Apply updates using reflect
+
+	teacherVal := reflect.ValueOf(&existingTeacher).Elem()
+	teacherType := teacherVal.Type()
+	fmt.Println("Teacher Val", teacherVal.Type())
+
+	for k, v := range updates {
+		for i := 0; i < teacherVal.NumField(); i++ {
+			field := teacherType.Field(i)
+			if field.Tag.Get("json") == k+",omitempty" {
+				if teacherVal.Field(i).CanSet() {
+					teacherVal.Field(i).Set(reflect.ValueOf(v).Convert(teacherVal.Field(i).Type()))
+				}
+			}
+		}
+	}
+
+	_, err = db.Exec("UPDATE techers SET first_name = ?, last_name = ?, email = ?, class = ?, subject = ? WHERE id = ?",
+		existingTeacher.FirstName, existingTeacher.LastName, existingTeacher.Email, existingTeacher.Class, existingTeacher.Subject, existingTeacher.ID,
+	)
+	if err != nil {
+		http.Error(w, "Error update teachers", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(existingTeacher)
+}
+
+func deleteTeacher(w http.ResponseWriter, r *http.Request) {
+	idStr := strings.TrimPrefix(r.URL.Path, "/teachers/")
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		log.Println(err)
+		http.Error(w, "Invalid Id", http.StatusBadRequest)
+		return
+	}
+
+	db, err := sqlconnect.ConnectDB()
+	if err != nil {
+		log.Println(err)
+		http.Error(w, "Unable to connect to database", http.StatusInternalServerError)
+		return
+	}
+	defer db.Close()
+
+	result, err := db.Exec("DELETE FROM teachers WHERE id = ?", id)
+	if err != nil {
+		http.Error(w, "error deleting teacher", http.StatusInternalServerError)
+		return
+	}
+	fmt.Println(result.RowsAffected())
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		http.Error(w, "Erorr retrieveing delete result", http.StatusInternalServerError)
+		return
+	}
+	if rowsAffected == 0 {
+		http.Error(w, "Teacher not found", http.StatusNotFound)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+	w.Header().Set("Content-Type", "application/json")
+	response := struct {
+		Status string `json:"statu"`
+		ID     int    `json:"id"`
+	}{
+		Status: "Teacher successfully deleted",
+		ID:     id,
+	}
+	json.NewEncoder(w).Encode(response)
 }
